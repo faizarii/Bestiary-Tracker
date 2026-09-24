@@ -15,9 +15,9 @@ import net.minecraft.world.inventory.ChestMenu;
 import java.util.List;
 
 public final class BestiaryHUD {
-    private static final int PANEL_WIDTH = 164;
+    private static final int PANEL_WIDTH = 190;
     private static final int VISIBLE_ROWS = 5;
-    private static final int ROW_HEIGHT = 11;
+    private static final int ROW_HEIGHT = 22;
     private static final int TITLE_HEIGHT = 12;
     private static final int SUMMARY_HEIGHT = 12;
     private static final int BUTTONS_HEIGHT = 15;
@@ -39,7 +39,7 @@ public final class BestiaryHUD {
             (graphics, tickCounter) -> {
                 Minecraft minecraft = Minecraft.getInstance();
                 if (SCANNER.isHudEnabled() && minecraft.screen == null) {
-                    renderPanel(graphics, SCANNER.hudX(), SCANNER.hudY(), false);
+                    renderPanel(graphics, SCANNER.hudX(), SCANNER.hudY(), false, panelHeight(false));
                 }
             }
         );
@@ -53,8 +53,8 @@ public final class BestiaryHUD {
                 if (!SCANNER.isBestiaryMenu(menu, screen.getTitle().getString())) return;
                 int x = sideX(screen);
                 int y = sideY(screen, menu);
-                renderPanel(graphics, x, y, true);
-                if (SCANNER.isHudEnabled()) renderPanel(graphics, SCANNER.hudX(), SCANNER.hudY(), false);
+                renderPanel(graphics, x, y, true, inventoryHeight(menu));
+                if (SCANNER.isHudEnabled()) renderPanel(graphics, SCANNER.hudX(), SCANNER.hudY(), false, panelHeight(false));
             });
             ScreenEvents.remove(screen).register(ignored -> {
                 dragging = false;
@@ -66,11 +66,11 @@ public final class BestiaryHUD {
                 int x = sideX(screen);
                 int y = sideY(screen, menu);
                 int buttonY = y + buttonTop();
-                if (inside(event.x(), event.y(), x + 5, buttonY, 75, BUTTONS_HEIGHT)) {
+                if (inside(event.x(), event.y(), x + 5, buttonY, 88, BUTTONS_HEIGHT)) {
                     SCANNER.toggleMode();
                     return false;
                 }
-                if (inside(event.x(), event.y(), x + 84, buttonY, 75, BUTTONS_HEIGHT)) {
+                if (inside(event.x(), event.y(), x + 97, buttonY, 88, BUTTONS_HEIGHT)) {
                     SCANNER.toggleHud();
                     return false;
                 }
@@ -99,8 +99,9 @@ public final class BestiaryHUD {
             ScreenMouseEvents.allowMouseScroll(screen).register((ignored, mouseX, mouseY, horizontalAmount, verticalAmount) -> {
                 int x = sideX(screen);
                 int y = sideY(screen, menu);
-                if (!inside(mouseX, mouseY, x, y, PANEL_WIDTH, panelHeight(true))) return true;
-                SCANNER.scroll(verticalAmount > 0 ? -1 : 1);
+                int invHeight = inventoryHeight(menu);
+                if (!inside(mouseX, mouseY, x, y, PANEL_WIDTH, invHeight)) return true;
+                SCANNER.scroll(verticalAmount > 0 ? -1 : 1, (invHeight - listTop(true)) / ROW_HEIGHT);
                 return false;
             });
         });
@@ -113,7 +114,11 @@ public final class BestiaryHUD {
     }
 
     private static int sideY(Screen screen, ChestMenu menu) {
-        return Math.max(0, (screen.height - (114 + menu.getRowCount() * 18)) / 2);
+        return Math.max(0, (screen.height - inventoryHeight(menu)) / 2);
+    }
+
+    private static int inventoryHeight(ChestMenu menu) {
+        return 114 + menu.getRowCount() * 18;
     }
 
     private static int buttonTop() {
@@ -130,56 +135,55 @@ public final class BestiaryHUD {
         return listTop(controls) + VISIBLE_ROWS * ROW_HEIGHT + (controls ? SCROLL_HINT_HEIGHT : 0) + BOTTOM_PADDING;
     }
 
-    private static void renderPanel(GuiGraphicsExtractor graphics, int x, int y, boolean controls) {
+    private static void renderPanel(GuiGraphicsExtractor graphics, int x, int y, boolean controls, int explicitHeight) {
         Font font = Minecraft.getInstance().font;
-        int height = panelHeight(controls);
-        graphics.fill(x, y, x + PANEL_WIDTH, y + height, 0xD0101010);
-        graphics.outline(x, y, PANEL_WIDTH, height, 0xFF55FFFF);
-        graphics.text(font, controls ? "Bestiary Tracker" : "Bestiary Tracker (drag)", x + 5, y + 4, 0xFF55FFFF, true);
+        int height = explicitHeight > 0 ? explicitHeight : panelHeight(controls);
+        graphics.fill(x, y, x + PANEL_WIDTH, y + height, 0xE00A0A0A);
+        graphics.text(font, controls ? "Bestiary" : "Bestiary (drag)", x + 5, y + 4, 0xFFFFFFFF, true);
 
-        String summary = controls
-            ? "Unlocked " + SCANNER.unlockedCount() + "/" + SCANNER.totalCount() + "  Maxed " + SCANNER.maxedCount()
-            : "U:" + SCANNER.unlockedCount() + "/" + SCANNER.totalCount() + " M:" + SCANNER.maxedCount();
-        graphics.text(font, summary, x + 5, y + TITLE_HEIGHT + 2, 0xFFAAFFAA, false);
+        int unlocked = SCANNER.unlockedCount();
+        int total = SCANNER.totalCount();
+        int maxed = SCANNER.maxedCount();
+        String summary = controls ? unlocked + "/" + total + " unlocked  " + maxed + " maxed" : unlocked + "/" + total;
+        graphics.text(font, summary, x + 5, y + TITLE_HEIGHT + 2, 0xFFFFFFFF, false);
 
         if (controls) {
             int buttonY = y + buttonTop();
-            graphics.fill(x + 5, buttonY, x + 80, buttonY + BUTTONS_HEIGHT, 0xFF303030);
-            graphics.fill(x + 84, buttonY, x + 159, buttonY + BUTTONS_HEIGHT, 0xFF303030);
-            graphics.centeredText(font, SCANNER.isNextTier() ? "Next Tier" : "Completion", x + 42, buttonY + 3, 0xFFFFFFFF);
-            graphics.centeredText(font, SCANNER.isHudEnabled() ? "HUD: ON" : "HUD: OFF", x + 121, buttonY + 3, 0xFFFFFFFF);
+            graphics.fill(x + 5, buttonY, x + 93, buttonY + BUTTONS_HEIGHT, 0xFF303030);
+            graphics.fill(x + 97, buttonY, x + 185, buttonY + BUTTONS_HEIGHT, 0xFF303030);
+            graphics.centeredText(font, SCANNER.isNextTier() ? "Next Tier" : "Completion", x + 49, buttonY + 3, 0xFFFFFFFF);
+            graphics.centeredText(font, SCANNER.isHudEnabled() ? "HUD: ON" : "HUD: OFF", x + 141, buttonY + 3, 0xFFFFFFFF);
         }
 
         int listY = y + listTop(controls);
+        int maxHeight = explicitHeight > 0 ? explicitHeight : height;
+        int availableListHeight = maxHeight - listTop(controls);
+        int visibleRows = availableListHeight / ROW_HEIGHT;
 
         List<BestiaryScanner.MobEntry> ranked = SCANNER.ranked();
         if (ranked.isEmpty()) {
-            graphics.text(font, "Visit a Bestiary mob page", x + 5, listY, 0xFFAAAAAA, false);
+            graphics.text(font, "Open a Bestiary mob page", x + 5, listY + 6, 0xFFFFFFFF, false);
             return;
         }
 
-        int offset = SCANNER.scrollOffset();
-        int limit = Math.min(VISIBLE_ROWS, ranked.size() - offset);
+        int offset = SCANNER.scrollOffset(visibleRows);
+        int limit = Math.min(visibleRows, ranked.size() - offset);
         for (int i = 0; i < limit; i++) {
             BestiaryScanner.MobEntry mob = ranked.get(offset + i);
-            String left = (offset + i + 1) + ". " + mob.name();
-            String right = format(SCANNER.remaining(mob));
-            int available = PANEL_WIDTH - 15 - font.width(right);
-            graphics.text(font, font.plainSubstrByWidth(left, available), x + 5, listY + i * ROW_HEIGHT, 0xFFFFFFFF, false);
-            graphics.text(font, right, x + PANEL_WIDTH - 5 - font.width(right), listY + i * ROW_HEIGHT, 0xFFFFFF55, false);
+            graphics.item(SCANNER.icon(mob), x + 4, listY + i * ROW_HEIGHT + 2);
+            String name = font.plainSubstrByWidth((offset + i + 1) + ". " + mob.name(), PANEL_WIDTH - 60);
+            graphics.text(font, name, x + 24, listY + i * ROW_HEIGHT + 6, 0xFFFFFFFF, false);
+            long current = SCANNER.current(mob);
+            long target = SCANNER.target(mob);
+            String progress = current + "/" + target;
+            graphics.text(font, progress, x + PANEL_WIDTH - 5 - font.width(progress), listY + i * ROW_HEIGHT + 6, 0xFFAAAAAA, false);
         }
 
-        if (controls && ranked.size() > VISIBLE_ROWS) {
+        if (controls && ranked.size() > visibleRows) {
+            int bottom = listY + limit * ROW_HEIGHT;
             String scrollHint = (offset + 1) + "-" + (offset + limit) + "/" + ranked.size();
-            graphics.text(font, scrollHint, x + PANEL_WIDTH - 5 - font.width(scrollHint), y + panelHeight(true) - 10, 0xFF888888, false);
+            graphics.text(font, scrollHint, x + PANEL_WIDTH - 5 - font.width(scrollHint), bottom, 0xFF888888, false);
         }
-    }
-
-    private static String format(long value) {
-        if (value >= 1_000_000_000) return String.format("%.1fb", value / 1_000_000_000.0);
-        if (value >= 1_000_000) return String.format("%.1fm", value / 1_000_000.0);
-        if (value >= 1_000) return String.format("%.1fk", value / 1_000.0);
-        return Long.toString(value);
     }
 
     private static boolean inside(double mouseX, double mouseY, int x, int y, int width, int height) {

@@ -7,6 +7,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.io.IOException;
@@ -31,6 +32,7 @@ public final class BestiaryScanner {
     private static final Pattern KILLS_PATTERN = Pattern.compile("Kills: ([0-9,.]+)");
     private static final Pattern PROGRESS_PATTERN = Pattern.compile("([0-9kKmMbB,.]+)/([0-9kKmMbB,.]+)$");
 
+    private final Map<String, ItemStack> icons = new LinkedHashMap<>();
     private Data data = new Data();
 
     public boolean isBestiaryMenu(ChestMenu menu, String title) {
@@ -52,11 +54,19 @@ public final class BestiaryScanner {
         int containerSlots = menu.getRowCount() * 9;
 
         for (int i = 0; i < containerSlots; i++) {
-            MobEntry entry = parseMob(menu.getSlot(i).getItem(), category);
-            if (entry != null && !entry.equals(data.mobs.put(entry.key(), entry))) changed = true;
+            ItemStack stack = menu.getSlot(i).getItem();
+            MobEntry entry = parseMob(stack, category);
+            if (entry == null) continue;
+            icons.put(entry.key(), stack.copy());
+            if (!entry.equals(data.mobs.put(entry.key(), entry))) changed = true;
         }
         if (changed) save();
         return true;
+    }
+
+    public ItemStack icon(MobEntry mob) {
+        ItemStack stack = icons.get(mob.key());
+        return stack != null ? stack : new ItemStack(Items.PLAYER_HEAD);
     }
 
     public List<MobEntry> ranked() {
@@ -67,7 +77,15 @@ public final class BestiaryScanner {
     }
 
     public long remaining(MobEntry mob) {
-        return Math.max(0, data.nextTier ? mob.nextNeeded - mob.nextCurrent : mob.maxNeeded - mob.kills);
+        return Math.max(0, target(mob) - current(mob));
+    }
+
+    public long current(MobEntry mob) {
+        return data.nextTier ? mob.nextCurrent : mob.kills;
+    }
+
+    public long target(MobEntry mob) {
+        return data.nextTier ? mob.nextNeeded : mob.maxNeeded;
     }
 
     public int unlockedCount() {
@@ -114,12 +132,12 @@ public final class BestiaryScanner {
         data.hudY = Math.max(0, y);
     }
 
-    public int scrollOffset() {
-        return Math.min(data.scrollOffset, Math.max(0, ranked().size() - 5));
+    public int scrollOffset(int visibleRows) {
+        return Math.min(data.scrollOffset, Math.max(0, ranked().size() - visibleRows));
     }
 
-    public void scroll(int amount) {
-        data.scrollOffset = Math.max(0, Math.min(Math.max(0, ranked().size() - 5), scrollOffset() + amount));
+    public void scroll(int amount, int visibleRows) {
+        data.scrollOffset = Math.max(0, Math.min(Math.max(0, ranked().size() - visibleRows), scrollOffset(visibleRows) + amount));
     }
 
     public void save() {
