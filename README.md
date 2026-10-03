@@ -1,44 +1,51 @@
-# Skyblock Bestiary Tracker
+# Bestiary Tracker
 
-A Fabric client mod for Hypixel Skyblock that reads your Bestiary menu and shows a HUD with the mobs closest to their next tier (or full completion).
+![GUI Example](https://cdn.modrinth.com/data/cached_images/e3def2165e352e5d08a91762fc1fa08d331916b9.jpeg)
 
-## What it does
+A client-side Fabric mod for Hypixel SkyBlock that shows which Bestiary mobs need the fewest kills to reach their next tier or full completion.
 
-- Scans the Bestiary chest GUI as you browse it and remembers kill counts per mob.
-- Shows a draggable HUD panel (toggleable) ranking mobs by how many kills are left.
-- Toggle between "next tier" and "full completion" ranking modes from the in-menu panel.
-- Saves progress and mob icons (including head textures) to `config/skyblock-bestiary-tracker.json` across restarts.
-- Recognizes Bestiary tier-up announcements and saves the confirmed tier for previously scanned mobs.
+## Features
+
+- Transparent, compact overlay beside the Bestiary menu.
+- Mob icons and current/target progress.
+- Switch between next-tier and completion sorting.
+- Click a mob row to open Bestiary filtered to that mob.
+- Hover hints showing what each row opens.
+- Optional draggable HUD outside menus.
+- Saved progress across restarts.
+- Bestiary level-up messages update confirmed tiers automatically.
 
 ## Requirements
 
-- Minecraft 26.1.2
-- Fabric Loader >= 0.19.5
-- Fabric API >= 0.155.3+26.1.2
-- Java 25
+- Minecraft **26.1.2**
+- Fabric Loader **0.19.5 or newer**
+- Fabric API **0.155.3+26.1.2** or a compatible newer version
+- Java **25**
 
-## Building
+## Installation
 
-```
-./gradlew build
-```
+Install Fabric Loader, then place this mod’s `.jar` and Fabric API in your Minecraft instance’s `mods` folder.
 
-The jar lands in `build/libs/`.
+## Getting started
 
-## Usage
+Open `/bestiary` and browse the mob pages to populate the tracker.
 
-Open the Bestiary menu in-game. A transparent tracker appears to the left of the inventory, showing your unlocked/maxed counts and the mobs nearest completion. Compact rows fit 13 mobs beside a six-row inventory at normal tracker scale. Scroll over the list to see more. The inventory moves right when necessary, and the tracker scales down if the window is too narrow.
+Use `[Next Tier]` to switch sorting modes and `[HUD: OFF]` to enable the standalone HUD. With the HUD enabled, open a chest or Bestiary menu and drag the **Bestiary HUD (drag)** title to move it.
 
-Click `[HUD: OFF]` to enable the standalone ten-row HUD. With the HUD enabled, a preview stays visible in chest menus at its saved position. Drag its `Bestiary HUD (drag)` title to reposition it. Positions are clamped to the screen so the HUD stays reachable after changing window size or GUI scale.
+Scroll over the menu overlay to see more mobs. Click a row to open its filtered Bestiary menu.
 
-Click a mob row in the menu tracker to run `/bestiary <mob name>` and open Bestiary filtered to that mob.
+## How progress updates
 
-If you used a version that did not save icons, visit the mob pages once to capture their heads. After that, they load with your saved progress on startup.
+The tracker reads kill counts from the Bestiary pages you open. It does not count individual kills or fetch your profile through the Hypixel API.
 
-Bestiary level-up chat updates the confirmed tier without opening a menu. Those rows show `Tier N*`, with a hover hint to refresh progress, and sort below rows with known remaining kills. Opening the mob page refreshes its exact counts and next target. Messages for unscanned mobs or names shared by multiple cached families are ignored because the announcement does not identify the area. Kill counts between tiers and overall unlocked/maxed totals still need menu scans.
+Bestiary level-up messages update confirmed tiers for previously scanned mobs. A row marked `Tier N*` needs a menu refresh to obtain its exact kill count and next target.
 
-## Notes
+Saved progress loads automatically when you restart Minecraft.
 
-Parsing relies on the exact Bestiary lore text format Hypixel currently uses. If Hypixel changes the item lore layout, the regexes in `BestiaryScanner` will need updating.
+## Issues and source
 
-API sync is not implemented. [Hypixel's API policy](https://developer.hypixel.net/policies) prohibits entering API keys into public mods. Automatic API updates would require a registered backend that keeps the application's key server-side, caches responses, and respects the API's usage rules.
+Report bugs on [GitHub](https://github.com/faizarii/Bestiary-Tracker/issues). Include your Minecraft version, mod version, and steps to reproduce the problem.
+
+[Source code](https://github.com/faizarii/Bestiary-Tracker)
+
+Not affiliated with or endorsed by Hypixel.
