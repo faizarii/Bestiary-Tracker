@@ -58,6 +58,14 @@ public final class BestiaryScanner {
             ItemStack stack = menu.getSlot(i).getItem();
             MobEntry entry = parseMob(stack, category);
             if (entry == null) continue;
+            if (title.equals("Search Results")) {
+                String name = entry.name();
+                List<MobEntry> matches = data.mobs.values().stream().filter(mob -> mob.name().equals(name)).toList();
+                if (matches.size() != 1) continue;
+                MobEntry known = matches.getFirst();
+                entry = new MobEntry(known.key(), entry.name(), known.category(), entry.kills(),
+                    entry.nextCurrent(), entry.nextNeeded(), entry.maxNeeded(), entry.tier());
+            }
             int confirmed = confirmedTier(entry);
             if (confirmed > entry.tier()) continue;
             if (data.confirmedTiers.remove(entry.key()) != null) changed = true;

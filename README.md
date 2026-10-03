@@ -27,11 +27,15 @@ The jar lands in `build/libs/`.
 
 ## Usage
 
-Open the Bestiary menu in-game. A panel appears next to the inventory showing your unlocked/maxed counts and the mobs nearest completion. Click "HUD: ON" to pin a smaller version of the panel to your screen outside menus; drag it by the title bar to reposition.
+Open the Bestiary menu in-game. A transparent tracker appears to the left of the inventory, showing your unlocked/maxed counts and the mobs nearest completion. Compact rows fit 13 mobs beside a six-row inventory at normal tracker scale. Scroll over the list to see more. The inventory moves right when necessary, and the tracker scales down if the window is too narrow.
+
+Click `[HUD: OFF]` to enable the standalone ten-row HUD. With the HUD enabled, a preview stays visible in chest menus at its saved position. Drag its `Bestiary HUD (drag)` title to reposition it. Positions are clamped to the screen so the HUD stays reachable after changing window size or GUI scale.
+
+Click a mob row in the menu tracker to run `/bestiary <mob name>` and open Bestiary filtered to that mob.
 
 If you used a version that did not save icons, visit the mob pages once to capture their heads. After that, they load with your saved progress on startup.
 
-Bestiary level-up chat updates the confirmed tier without opening a menu. Those rows show `Tier N` and `Open menu to refresh`, and sort below rows with known remaining kills. Opening the mob page refreshes its exact counts and next target. Messages for unscanned mobs or names shared by multiple cached families are ignored because the announcement does not identify the area. Kill counts between tiers and overall unlocked/maxed totals still need menu scans.
+Bestiary level-up chat updates the confirmed tier without opening a menu. Those rows show `Tier N*`, with a hover hint to refresh progress, and sort below rows with known remaining kills. Opening the mob page refreshes its exact counts and next target. Messages for unscanned mobs or names shared by multiple cached families are ignored because the announcement does not identify the area. Kill counts between tiers and overall unlocked/maxed totals still need menu scans.
 
 ## Notes
 

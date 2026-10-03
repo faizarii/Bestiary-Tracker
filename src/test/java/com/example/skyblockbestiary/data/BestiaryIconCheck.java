@@ -13,6 +13,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 public final class BestiaryIconCheck {
     public static void main(String[] args) {
         BestiaryTierMessagesCheck.run();
+        com.example.skyblockbestiary.hud.BestiaryRowActionCheck.run();
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_INITIALIZERS
