@@ -2,6 +2,8 @@ package com.example.skyblockbestiary.hud;
 
 import com.example.skyblockbestiary.data.BestiaryScanner;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.Minecraft;
@@ -34,6 +36,10 @@ public final class BestiaryHUD {
 
     public static void init() {
         SCANNER.load();
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            if (!overlay) SCANNER.receiveMessage(message.getString());
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> SCANNER.resetChat());
         HudElementRegistry.addLast(
             Identifier.fromNamespaceAndPath("skyblock-bestiary-tracker", "tracker"),
             (graphics, tickCounter) -> {
@@ -171,12 +177,16 @@ public final class BestiaryHUD {
         for (int i = 0; i < limit; i++) {
             BestiaryScanner.MobEntry mob = ranked.get(offset + i);
             graphics.item(SCANNER.icon(mob), x + 4, listY + i * ROW_HEIGHT + 2);
-            String name = font.plainSubstrByWidth((offset + i + 1) + ". " + mob.name(), PANEL_WIDTH - 60);
-            graphics.text(font, name, x + 24, listY + i * ROW_HEIGHT + 6, 0xFFFFFFFF, false);
+            int tier = SCANNER.confirmedTier(mob);
             long current = SCANNER.current(mob);
             long target = SCANNER.target(mob);
-            String progress = current + "/" + target;
-            graphics.text(font, progress, x + PANEL_WIDTH - 5 - font.width(progress), listY + i * ROW_HEIGHT + 6, 0xFFAAAAAA, false);
+            String progress = tier > 0 ? "Tier " + tier : current + "/" + target;
+            String name = font.plainSubstrByWidth((offset + i + 1) + ". " + mob.name(), PANEL_WIDTH - 34 - font.width(progress));
+            graphics.text(font, name, x + 24, listY + i * ROW_HEIGHT + (tier > 0 ? 1 : 6), 0xFFFFFFFF, false);
+            graphics.text(font, progress, x + PANEL_WIDTH - 5 - font.width(progress), listY + i * ROW_HEIGHT + (tier > 0 ? 1 : 6), 0xFFAAAAAA, false);
+            if (tier > 0) {
+                graphics.text(font, "Open menu to refresh", x + 24, listY + i * ROW_HEIGHT + 11, 0xFFAAAAAA, false);
+            }
         }
 
         if (controls && ranked.size() > visibleRows) {

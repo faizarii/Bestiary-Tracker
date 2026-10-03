@@ -33,6 +33,7 @@ public final class BestiaryScanner {
     private static final Pattern PROGRESS_PATTERN = Pattern.compile("([0-9kKmMbB,.]+)/([0-9kKmMbB,.]+)$");
 
     private final Map<String, ItemStack> icons = new LinkedHashMap<>();
+    private final BestiaryTierMessages tierMessages = new BestiaryTierMessages();
     private Data data = new Data();
 
     public boolean isBestiaryMenu(ChestMenu menu, String title) {
@@ -57,7 +58,19 @@ public final class BestiaryScanner {
             ItemStack stack = menu.getSlot(i).getItem();
             MobEntry entry = parseMob(stack, category);
             if (entry == null) continue;
-            icons.put(entry.key(), stack.copy());
+            int confirmed = confirmedTier(entry);
+            if (confirmed > entry.tier()) continue;
+            if (data.confirmedTiers.remove(entry.key()) != null) changed = true;
+            ItemStack previousIcon = icons.get(entry.key());
+            if (previousIcon == null || !ItemStack.isSameItemSameComponents(previousIcon, stack)) {
+                try {
+                    BestiaryIcon icon = BestiaryIcon.capture(stack);
+                    icons.put(entry.key(), stack.copy());
+                    if (!icon.equals(data.icons.put(entry.key(), icon))) changed = true;
+                } catch (RuntimeException exception) {
+                    System.err.println("Failed to capture bestiary icon: " + exception.getMessage());
+                }
+            }
             if (!entry.equals(data.mobs.put(entry.key(), entry))) changed = true;
         }
         if (changed) save();
@@ -71,9 +84,34 @@ public final class BestiaryScanner {
 
     public List<MobEntry> ranked() {
         return data.mobs.values().stream()
-            .filter(mob -> remaining(mob) > 0)
-            .sorted(Comparator.comparingLong(this::remaining).thenComparing(MobEntry::name))
+            .filter(mob -> confirmedTier(mob) > 0 || remaining(mob) > 0)
+            .sorted(Comparator.comparingLong((MobEntry mob) -> confirmedTier(mob) > 0 ? Long.MAX_VALUE : remaining(mob))
+                .thenComparing(MobEntry::name))
             .toList();
+    }
+
+    public int confirmedTier(MobEntry mob) {
+        return data.confirmedTiers.getOrDefault(mob.key(), 0);
+    }
+
+    public void receiveMessage(String message) {
+        long now = System.nanoTime() / 1_000_000;
+        for (String line : message.split("\\R")) {
+            BestiaryTierMessages.TierUp tierUp = tierMessages.accept(line, now);
+            if (tierUp == null) continue;
+            List<MobEntry> matches = data.mobs.values().stream()
+                .filter(mob -> mob.name().equals(tierUp.name())).toList();
+            // Chat has no area identifier, so never choose between same-name families.
+            if (matches.size() != 1) continue;
+            MobEntry mob = matches.getFirst();
+            if (tierUp.tier() <= Math.max(mob.tier(), confirmedTier(mob))) continue;
+            data.confirmedTiers.put(mob.key(), tierUp.tier());
+            save();
+        }
+    }
+
+    public void resetChat() {
+        tierMessages.reset();
     }
 
     public long remaining(MobEntry mob) {
@@ -157,6 +195,16 @@ public final class BestiaryScanner {
             Data loaded = GSON.fromJson(reader, DATA_TYPE);
             if (loaded != null) data = loaded;
             if (data.mobs == null) data.mobs = new LinkedHashMap<>();
+            if (data.icons == null) data.icons = new LinkedHashMap<>();
+            if (data.confirmedTiers == null) data.confirmedTiers = new LinkedHashMap<>();
+            icons.clear();
+            data.icons.forEach((key, icon) -> {
+                try {
+                    icons.put(key, icon.restore());
+                } catch (RuntimeException exception) {
+                    System.err.println("Failed to load bestiary icon " + key + ": " + exception.getMessage());
+                }
+            });
         } catch (IOException | RuntimeException exception) {
             System.err.println("Failed to load bestiary data: " + exception.getMessage());
         }
@@ -223,7 +271,8 @@ public final class BestiaryScanner {
         Matcher nameMatcher = NAME_PATTERN.matcher(stack.getHoverName().getString().trim());
         if (!nameMatcher.matches()) return null;
         String name = nameMatcher.group(1);
-        return new MobEntry(category + "/" + name, name, category, kills, nextCurrent, nextNeeded, maxNeeded);
+        int tier = BestiaryTierMessages.menuTier(nameMatcher.group(2));
+        return new MobEntry(category + "/" + name, name, category, kills, nextCurrent, nextNeeded, maxNeeded, tier);
     }
 
     static long parseNumber(String input) {
@@ -236,10 +285,12 @@ public final class BestiaryScanner {
         return Math.round(Double.parseDouble(value) * multiplier);
     }
 
-    public record MobEntry(String key, String name, String category, long kills, long nextCurrent, long nextNeeded, long maxNeeded) {}
+    public record MobEntry(String key, String name, String category, long kills, long nextCurrent, long nextNeeded, long maxNeeded, int tier) {}
 
     private static final class Data {
         private Map<String, MobEntry> mobs = new LinkedHashMap<>();
+        private Map<String, BestiaryIcon> icons = new LinkedHashMap<>();
+        private Map<String, Integer> confirmedTiers = new LinkedHashMap<>();
         private boolean nextTier = true;
         private boolean hudEnabled;
         private int hudX = 8;

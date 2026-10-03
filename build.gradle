@@ -38,6 +38,22 @@ tasks.withType(JavaCompile).configureEach {
     it.options.release = 25
 }
 
+tasks.register('checkIconPersistence', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.example.skyblockbestiary.data.BestiaryIconCheck'
+    enableAssertions = true
+}
+
+tasks.named('check') {
+    dependsOn 'checkIconPersistence'
+}
+
+tasks.named('test') {
+    // Tests use the standalone check above rather than a test framework.
+    failOnNoDiscoveredTests = false
+}
+
 publishing {
     publications {
         create('mavenJava', MavenPublication) {
