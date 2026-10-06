@@ -11,7 +11,8 @@ final class BestiaryTierMessagesCheck {
         assert parser.accept(" ", 11) == null;
         var event = parser.accept(honeyhog, 12);
         assert event != null && event.name().equals("Honeyhog") && event.previous() == 1 && event.tier() == 2;
-        assert parser.accept(honeyhog, 13) == null : "Only one tier line per banner";
+        event = parser.accept("Beehemoth VIII ➜ IX", 13);
+        assert event != null && event.name().equals("Beehemoth") && event.tier() == 9 : "Multiple families per banner";
 
         parser.accept("BESTIARY", 20);
         event = parser.accept("  Giant Isopod 9 ➡️ 10  ", 21);
@@ -30,6 +31,10 @@ final class BestiaryTierMessagesCheck {
         assert parser.accept(honeyhog, 71) == null : "Disconnect clears the banner";
         parser.accept("BESTIARY", 80);
         assert parser.accept("Honeyhog 999999999999999 ➡ 2", 81) == null;
+        parser.accept("BESTIARY", 90);
+        assert parser.accept("▬▬▬▬▬▬▬▬▬▬", 91) == null;
+        event = parser.accept("Hewer 1 → 2", 92);
+        assert event != null && event.name().equals("Hewer") && event.tier() == 2 : "Decorative lines do not consume the banner";
 
         assert BestiaryTierMessages.menuTier(null) == 0;
         assert BestiaryTierMessages.menuTier("12") == 12;

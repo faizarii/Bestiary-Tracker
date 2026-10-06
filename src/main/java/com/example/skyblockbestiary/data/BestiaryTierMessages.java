@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 
 final class BestiaryTierMessages {
     private static final Pattern FORMATTING = Pattern.compile("(?i)§[0-9a-fk-or]");
-    private static final Pattern TIER_UP = Pattern.compile("^(.+?)\\s+(\\d{1,4})\\s*➡\\uFE0F?\\s*(\\d{1,4})$");
+    private static final Pattern TIER_UP = Pattern.compile("^(.+?)\\s+(\\d{1,4}|[IVXLCDM]+)\\s*[➡→➜]\\uFE0F?\\s*(\\d{1,4}|[IVXLCDM]+)$");
     private long headerTime;
     private boolean awaitingTier;
 
@@ -22,11 +22,13 @@ final class BestiaryTierMessages {
             return null;
         }
         if (text.isEmpty()) return null;
-        reset();
         Matcher matcher = TIER_UP.matcher(text);
-        if (!matcher.matches()) return null;
-        int previous = Integer.parseInt(matcher.group(2));
-        int tier = Integer.parseInt(matcher.group(3));
+        if (!matcher.matches()) {
+            if (text.equals("REWARDS")) reset();
+            return null;
+        }
+        int previous = menuTier(matcher.group(2));
+        int tier = menuTier(matcher.group(3));
         return tier > previous ? new TierUp(matcher.group(1), previous, tier) : null;
     }
 

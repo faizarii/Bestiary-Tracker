@@ -11,7 +11,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 
 public final class BestiaryIconCheck {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws java.io.IOException {
         BestiaryTierMessagesCheck.run();
         com.example.skyblockbestiary.hud.BestiaryRowActionCheck.run();
         SharedConstants.tryDetectVersion();
@@ -19,6 +19,7 @@ public final class BestiaryIconCheck {
         net.minecraft.core.registries.BuiltInRegistries.DATA_COMPONENT_INITIALIZERS
             .build(net.minecraft.data.registries.VanillaRegistries.createLookup())
             .forEach(net.minecraft.core.component.DataComponentInitializers.PendingComponents::apply);
+        BestiaryScannerCheck.run();
         Gson gson = new Gson();
         ResolvableProfile profile = ResolvableProfile.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
             {"id":[0,0,0,1],"name":"Mob","properties":[

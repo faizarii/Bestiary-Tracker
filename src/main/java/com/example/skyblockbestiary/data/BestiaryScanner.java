@@ -27,14 +27,23 @@ import java.util.regex.Pattern;
 public final class BestiaryScanner {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Type DATA_TYPE = new TypeToken<Data>() {}.getType();
-    private static final Path DATA_FILE = FabricLoader.getInstance().getConfigDir().resolve("skyblock-bestiary-tracker.json");
+    private static final Pattern PAGE_SUFFIX = Pattern.compile("(?i)\\s*\\((?:page\\s+)?\\d+(?:\\s*/\\s*\\d+)?\\)\\s*$");
     private static final Pattern NAME_PATTERN = Pattern.compile("^(.+?)(?: ([IVXLCDM]+|\\d+))?$");
     private static final Pattern KILLS_PATTERN = Pattern.compile("Kills: ([0-9,.]+)");
     private static final Pattern PROGRESS_PATTERN = Pattern.compile("([0-9kKmMbB,.]+)/([0-9kKmMbB,.]+)$");
 
     private final Map<String, ItemStack> icons = new LinkedHashMap<>();
     private final BestiaryTierMessages tierMessages = new BestiaryTierMessages();
+    private final Path dataFile;
     private Data data = new Data();
+
+    public BestiaryScanner() {
+        this(FabricLoader.getInstance().getConfigDir().resolve("skyblock-bestiary-tracker.json"));
+    }
+
+    BestiaryScanner(Path dataFile) {
+        this.dataFile = dataFile;
+    }
 
     public boolean isBestiaryMenu(ChestMenu menu, String title) {
         if (title.equals("Bestiary") || title.contains("Bestiary ➜") || title.equals("Search Results")) return true;
@@ -51,7 +60,7 @@ public final class BestiaryScanner {
     public boolean scan(ChestMenu menu, String title) {
         if (!isBestiaryMenu(menu, title)) return false;
         boolean changed = title.equals("Bestiary") && scanRootTotals(menu);
-        String category = title.contains("➜") ? title.substring(title.lastIndexOf('➜') + 1).trim() : title;
+        String category = normalizeCategory(title);
         int containerSlots = menu.getRowCount() * 9;
 
         for (int i = 0; i < containerSlots; i++) {
@@ -67,7 +76,9 @@ public final class BestiaryScanner {
                     entry.nextCurrent(), entry.nextNeeded(), entry.maxNeeded(), entry.tier());
             }
             int confirmed = confirmedTier(entry);
-            if (confirmed > entry.tier()) continue;
+            MobEntry previous = data.mobs.get(entry.key());
+            if (confirmed > entry.tier() || previous != null
+                && (entry.tier() < previous.tier() || entry.kills() < previous.kills())) continue;
             if (data.confirmedTiers.remove(entry.key()) != null) changed = true;
             ItemStack previousIcon = icons.get(entry.key());
             if (previousIcon == null || !ItemStack.isSameItemSameComponents(previousIcon, stack)) {
@@ -188,8 +199,8 @@ public final class BestiaryScanner {
 
     public void save() {
         try {
-            Files.createDirectories(DATA_FILE.getParent());
-            try (Writer writer = Files.newBufferedWriter(DATA_FILE)) {
+            Files.createDirectories(dataFile.getParent());
+            try (Writer writer = Files.newBufferedWriter(dataFile)) {
                 GSON.toJson(data, DATA_TYPE, writer);
             }
         } catch (IOException exception) {
@@ -198,13 +209,37 @@ public final class BestiaryScanner {
     }
 
     public void load() {
-        if (!Files.exists(DATA_FILE)) return;
-        try (Reader reader = Files.newBufferedReader(DATA_FILE)) {
+        if (!Files.exists(dataFile)) return;
+        boolean migrated = false;
+        try (Reader reader = Files.newBufferedReader(dataFile)) {
             Data loaded = GSON.fromJson(reader, DATA_TYPE);
             if (loaded != null) data = loaded;
             if (data.mobs == null) data.mobs = new LinkedHashMap<>();
             if (data.icons == null) data.icons = new LinkedHashMap<>();
             if (data.confirmedTiers == null) data.confirmedTiers = new LinkedHashMap<>();
+            for (MobEntry old : List.copyOf(data.mobs.values())) {
+                String category = normalizeCategory(old.category());
+                String key = category + "/" + old.name();
+                if (key.equals(old.key())) continue;
+                migrated = true;
+                data.mobs.remove(old.key());
+                MobEntry existing = data.mobs.get(key);
+                BestiaryIcon oldIcon = data.icons.remove(old.key());
+                if (existing == null || old.tier() > existing.tier()
+                    || old.tier() == existing.tier() && old.kills() > existing.kills()) {
+                    data.mobs.put(key, new MobEntry(key, old.name(), category, old.kills(),
+                        old.nextCurrent(), old.nextNeeded(), old.maxNeeded(), old.tier()));
+                    if (oldIcon != null) data.icons.put(key, oldIcon);
+                } else if (!data.icons.containsKey(key) && oldIcon != null) {
+                    data.icons.put(key, oldIcon);
+                }
+                Integer confirmed = data.confirmedTiers.remove(old.key());
+                if (confirmed != null) data.confirmedTiers.merge(key, confirmed, Math::max);
+            }
+            data.confirmedTiers.entrySet().removeIf(entry -> {
+                MobEntry mob = data.mobs.get(entry.getKey());
+                return mob != null && entry.getValue() <= mob.tier();
+            });
             icons.clear();
             data.icons.forEach((key, icon) -> {
                 try {
@@ -215,7 +250,14 @@ public final class BestiaryScanner {
             });
         } catch (IOException | RuntimeException exception) {
             System.err.println("Failed to load bestiary data: " + exception.getMessage());
+            return;
         }
+        if (migrated) save();
+    }
+
+    private static String normalizeCategory(String title) {
+        String category = title.substring(title.lastIndexOf('➜') + 1).trim();
+        return PAGE_SUFFIX.matcher(category).replaceFirst("").trim();
     }
 
     private boolean scanRootTotals(ChestMenu menu) {
