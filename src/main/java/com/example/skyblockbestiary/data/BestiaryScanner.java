@@ -67,18 +67,25 @@ public final class BestiaryScanner {
             ItemStack stack = menu.getSlot(i).getItem();
             MobEntry entry = parseMob(stack, category);
             if (entry == null) continue;
-            if (title.equals("Search Results")) {
+            if (entry.maxNeeded() == 0) {
                 String name = entry.name();
                 List<MobEntry> matches = data.mobs.values().stream().filter(mob -> mob.name().equals(name)).toList();
-                if (matches.size() != 1) continue;
-                MobEntry known = matches.getFirst();
-                entry = new MobEntry(known.key(), entry.name(), known.category(), entry.kills(),
-                    entry.nextCurrent(), entry.nextNeeded(), entry.maxNeeded(), entry.tier());
+                if (matches.size() > 1) continue;
+                if (matches.size() == 1) {
+                    MobEntry known = matches.getFirst();
+                    entry = new MobEntry(known.key(), entry.name(), known.category(), entry.kills(),
+                        entry.nextCurrent(), entry.nextNeeded(), known.maxNeeded(), entry.tier());
+                }
             }
+            if (mergeUnknown(entry)) changed = true;
             int confirmed = confirmedTier(entry);
             MobEntry previous = data.mobs.get(entry.key());
             if (confirmed > entry.tier() || previous != null
                 && (entry.tier() < previous.tier() || entry.kills() < previous.kills())) continue;
+            if (previous != null) {
+                entry = new MobEntry(entry.key(), entry.name(), previous.category(), entry.kills(),
+                    entry.nextCurrent(), entry.nextNeeded(), entry.maxNeeded(), entry.tier());
+            }
             if (data.confirmedTiers.remove(entry.key()) != null) changed = true;
             ItemStack previousIcon = icons.get(entry.key());
             if (previousIcon == null || !ItemStack.isSameItemSameComponents(previousIcon, stack)) {
@@ -217,24 +224,18 @@ public final class BestiaryScanner {
             if (data.mobs == null) data.mobs = new LinkedHashMap<>();
             if (data.icons == null) data.icons = new LinkedHashMap<>();
             if (data.confirmedTiers == null) data.confirmedTiers = new LinkedHashMap<>();
+            if (data.mobs.values().stream().anyMatch(mob -> !familyKey(mob.name(), mob.maxNeeded()).equals(mob.key()))) {
+                Path backup = dataFile.resolveSibling(dataFile.getFileName() + ".before-family-keys.bak");
+                if (!Files.exists(backup)) Files.copy(dataFile, backup);
+            }
             for (MobEntry old : List.copyOf(data.mobs.values())) {
-                String category = normalizeCategory(old.category());
-                String key = category + "/" + old.name();
+                String key = familyKey(old.name(), old.maxNeeded());
                 if (key.equals(old.key())) continue;
                 migrated = true;
-                data.mobs.remove(old.key());
-                MobEntry existing = data.mobs.get(key);
-                BestiaryIcon oldIcon = data.icons.remove(old.key());
-                if (existing == null || old.tier() > existing.tier()
-                    || old.tier() == existing.tier() && old.kills() > existing.kills()) {
-                    data.mobs.put(key, new MobEntry(key, old.name(), category, old.kills(),
-                        old.nextCurrent(), old.nextNeeded(), old.maxNeeded(), old.tier()));
-                    if (oldIcon != null) data.icons.put(key, oldIcon);
-                } else if (!data.icons.containsKey(key) && oldIcon != null) {
-                    data.icons.put(key, oldIcon);
-                }
-                Integer confirmed = data.confirmedTiers.remove(old.key());
-                if (confirmed != null) data.confirmedTiers.merge(key, confirmed, Math::max);
+                mergeStoredMob(old, key, old.maxNeeded());
+            }
+            for (MobEntry mob : List.copyOf(data.mobs.values())) {
+                if (mergeUnknown(mob)) migrated = true;
             }
             data.confirmedTiers.entrySet().removeIf(entry -> {
                 MobEntry mob = data.mobs.get(entry.getKey());
@@ -258,6 +259,38 @@ public final class BestiaryScanner {
     private static String normalizeCategory(String title) {
         String category = title.substring(title.lastIndexOf('➜') + 1).trim();
         return PAGE_SUFFIX.matcher(category).replaceFirst("").trim();
+    }
+
+    private static String familyKey(String name, long maxNeeded) {
+        return name + "/" + maxNeeded;
+    }
+
+    private boolean mergeUnknown(MobEntry entry) {
+        if (entry.maxNeeded() == 0) return false;
+        MobEntry unknown = data.mobs.get(familyKey(entry.name(), 0));
+        if (unknown == null || data.mobs.values().stream().anyMatch(mob -> mob.name().equals(entry.name())
+            && mob.maxNeeded() > 0 && mob.maxNeeded() != entry.maxNeeded())) return false;
+        mergeStoredMob(unknown, entry.key(), entry.maxNeeded());
+        return true;
+    }
+
+    private void mergeStoredMob(MobEntry old, String key, long maxNeeded) {
+        data.mobs.remove(old.key());
+        MobEntry existing = data.mobs.get(key);
+        BestiaryIcon oldIcon = data.icons.remove(old.key());
+        ItemStack oldStack = icons.remove(old.key());
+        if (existing == null || old.tier() > existing.tier()
+            || old.tier() == existing.tier() && old.kills() > existing.kills()) {
+            data.mobs.put(key, new MobEntry(key, old.name(), normalizeCategory(old.category()), old.kills(),
+                old.nextCurrent(), old.nextNeeded(), maxNeeded, old.tier()));
+            if (oldIcon != null) data.icons.put(key, oldIcon);
+            if (oldStack != null) icons.put(key, oldStack);
+        } else if (!data.icons.containsKey(key) && oldIcon != null) {
+            data.icons.put(key, oldIcon);
+            if (oldStack != null) icons.put(key, oldStack);
+        }
+        Integer confirmed = data.confirmedTiers.remove(old.key());
+        if (confirmed != null) data.confirmedTiers.merge(key, confirmed, Math::max);
     }
 
     private boolean scanRootTotals(ChestMenu menu) {
@@ -322,7 +355,7 @@ public final class BestiaryScanner {
         if (!nameMatcher.matches()) return null;
         String name = nameMatcher.group(1);
         int tier = BestiaryTierMessages.menuTier(nameMatcher.group(2));
-        return new MobEntry(category + "/" + name, name, category, kills, nextCurrent, nextNeeded, maxNeeded, tier);
+        return new MobEntry(familyKey(name, maxNeeded), name, category, kills, nextCurrent, nextNeeded, maxNeeded, tier);
     }
 
     static long parseNumber(String input) {

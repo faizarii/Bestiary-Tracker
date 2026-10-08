@@ -17,26 +17,36 @@ final class BestiaryScannerCheck {
         var directory = Files.createTempDirectory("bestiary-scanner-check");
         var file = directory.resolve("progress.json");
         try {
+            checkBrowsing(directory.resolve("browsing.json"));
+            checkHiddenProgress(directory.resolve("hidden.json"));
             Files.writeString(file, """
                 {"mobs": {
                   "Fishing (1/2)/Beehemoth": {"key":"Fishing (1/2)/Beehemoth","name":"Beehemoth",
                     "category":"Fishing (1/2)","kills":8,"nextCurrent":8,"nextNeeded":10,"maxNeeded":100,"tier":1},
                   "Fishing (2/2)/Beehemoth": {"key":"Fishing (2/2)/Beehemoth","name":"Beehemoth",
-                    "category":"Fishing (2/2)","kills":9,"nextCurrent":9,"nextNeeded":10,"maxNeeded":100,"tier":1}},
+                    "category":"Fishing (2/2)","kills":9,"nextCurrent":9,"nextNeeded":10,"maxNeeded":100,"tier":1},
+                  "Beehemoth/Beehemoth": {"key":"Beehemoth/Beehemoth","name":"Beehemoth",
+                    "category":"Beehemoth","kills":7,"nextCurrent":7,"nextNeeded":10,"maxNeeded":100,"tier":1},
+                  "Search Results/Beehemoth": {"key":"Search Results/Beehemoth","name":"Beehemoth",
+                    "category":"Search Results","kills":6,"nextCurrent":6,"nextNeeded":10,"maxNeeded":0,"tier":1}},
                  "icons":{"Fishing (2/2)/Beehemoth":{"item":"minecraft:dragon_egg"}},
                  "confirmedTiers":{"Fishing (1/2)/Beehemoth":2},"hudEnabled":true,"hudX":30}
                 """);
             var scanner = new BestiaryScanner(file);
+            String original = Files.readString(file);
             scanner.load();
-            assert scanner.ranked().size() == 1 : "Saved page aliases should merge";
+            var backup = file.resolveSibling("progress.json.before-family-keys.bak");
+            assert Files.readString(backup).equals(original) : "Original saved data must be backed up before migration";
+            assert scanner.ranked().size() == 1 : "Saved page, detail, and hidden-progress aliases should merge";
             var mob = scanner.ranked().getFirst();
-            assert mob.key().equals("Fishing/Beehemoth") && mob.kills() == 9;
+            assert mob.key().equals("Beehemoth/100") && mob.kills() == 9;
             assert scanner.confirmedTier(mob) == 2 : "Pending tier must survive migration";
             assert scanner.icon(mob).is(Items.DRAGON_EGG) : "Icon must survive migration";
             assert scanner.isHudEnabled() && scanner.hudX() == 30 : "Settings must survive migration";
 
             var reloaded = new BestiaryScanner(file);
             reloaded.load();
+            assert Files.readString(backup).equals(original) : "Reload must not overwrite the original backup";
             assert reloaded.ranked().equals(scanner.ranked()) : "Migration must persist";
             assert reloaded.confirmedTier(reloaded.ranked().getFirst()) == 2;
 
@@ -66,15 +76,78 @@ final class BestiaryScannerCheck {
             menu.getContainer().setItem(0, mobItem("Beehemoth III", 25, 0, 20));
 
             scanner.scan(menu, "Bestiary ➜ Other Area");
-            assert scanner.ranked().size() == 2 : "Distinct same-name families must stay distinct";
+            assert scanner.ranked().size() == 1 : "Another menu title must not create a new family";
             scanner.receiveMessage("BESTIARY\nBeehemoth 3 ➡ 4");
-            assert scanner.ranked().stream().allMatch(entry -> scanner.confirmedTier(entry) == 0)
-                : "Ambiguous messages must not change unrelated families";
+            assert scanner.confirmedTier(scanner.ranked().getFirst()) == 4;
             System.out.println("Bestiary scanner checks passed");
         } finally {
+            Files.deleteIfExists(directory.resolve("browsing.json"));
+            Files.deleteIfExists(directory.resolve("hidden.json"));
+            Files.deleteIfExists(directory.resolve("progress.json.before-family-keys.bak"));
             Files.deleteIfExists(file);
             Files.deleteIfExists(directory);
         }
+    }
+
+    private static void checkBrowsing(java.nio.file.Path file) {
+        var scanner = new BestiaryScanner(file);
+        var menu = ChestMenu.sixRows(0, new Inventory(null, null));
+        menu.getContainer().setItem(10, mobItem("Enderman I", 3, 3, 10));
+        scanner.scan(menu, "Bestiary ➜ The End");
+        menu.getContainer().clearContent();
+        menu.getContainer().setItem(4, mobItem("Enderman I", 3, 3, 10));
+        scanner.scan(menu, "Bestiary ➜ Enderman");
+        menu.getContainer().clearContent();
+        menu.getContainer().setItem(10, mobItem("Enderman I", 3, 3, 10));
+        scanner.scan(menu, "(1/2) Search Results");
+        assert scanner.ranked().size() == 1 : "Area, detail, and paginated search must update the same family";
+
+        menu.getContainer().setItem(11, mobItem("Hewer I", 2, 2, 10));
+        scanner.scan(menu, "Bestiary ➜ Galatea");
+        scanner.scan(menu, "(2/3) Bestiary ➜ Fishing");
+        assert scanner.ranked().size() == 2 : "Browsing another category must not duplicate known families";
+        scanner.receiveMessage("BESTIARY\nEnderman 1 ➡ 2\nHewer 1 ➡ 2\nREWARDS");
+        assert scanner.ranked().stream().allMatch(entry -> scanner.confirmedTier(entry) == 2)
+            : "Browsing aliases must not make milestone messages ambiguous";
+
+        var differentFamily = mobItem("Enderman I", 3, 3, 10);
+        differentFamily.set(DataComponents.LORE, new ItemLore(List.of(
+            Component.literal("Kills: 3"), Component.literal("Progress to Tier"), Component.literal("3/10"),
+            Component.literal("Overall Progress"), Component.literal("3/50"))));
+        menu.getContainer().clearContent();
+        menu.getContainer().setItem(10, differentFamily);
+        scanner.scan(menu, "Bestiary ➜ Private Island");
+        assert scanner.ranked().size() == 3 : "Genuine same-name families with different caps must remain separate";
+        var beforeAmbiguousMessage = scanner.ranked().stream().map(scanner::confirmedTier).toList();
+        scanner.receiveMessage("BESTIARY\nEnderman 2 ➡ 3\nREWARDS");
+        assert scanner.ranked().stream().map(scanner::confirmedTier).toList().equals(beforeAmbiguousMessage)
+            : "A same-name message must not update both genuine families";
+        scanner.save();
+        var reloaded = new BestiaryScanner(file);
+        reloaded.load();
+        assert reloaded.ranked().equals(scanner.ranked()) : "Browsing identities must survive restart";
+    }
+
+    private static void checkHiddenProgress(java.nio.file.Path file) {
+        var scanner = new BestiaryScanner(file);
+        var menu = ChestMenu.sixRows(0, new Inventory(null, null));
+        var hidden = mobItem("Hewer I", 2, 2, 10);
+        hidden.set(DataComponents.LORE, new ItemLore(List.of(
+            Component.literal("Kills: 2"), Component.literal("Progress to Tier"), Component.literal("2/10"),
+            Component.literal("Overall Progress: HIDDEN"))));
+        menu.getContainer().setItem(10, hidden);
+        scanner.scan(menu, "Bestiary ➜ Galatea");
+        scanner.scan(menu, "Bestiary ➜ Hewer");
+        assert scanner.ranked().size() == 1 : "Hidden overall progress must not duplicate a family";
+        scanner.receiveMessage("BESTIARY\nHewer 1 ➡ 2\nREWARDS");
+        menu.getContainer().setItem(10, mobItem("Hewer II", 10, 0, 15));
+        scanner.scan(menu, "Search Results");
+        var mob = scanner.ranked().getFirst();
+        assert scanner.ranked().size() == 1 && mob.key().equals("Hewer/100") && mob.tier() == 2
+            && scanner.confirmedTier(mob) == 0 : "Revealing the cap must upgrade the existing identity";
+        menu.getContainer().setItem(10, hidden);
+        scanner.scan(menu, "(1/2) Search Results");
+        assert scanner.ranked().getFirst().equals(mob) : "Hidden stale data must not erase the known cap or progress";
     }
 
     private static ItemStack mobItem(String name, long kills, long current, long needed) {
