@@ -231,7 +231,7 @@ public final class BestiaryHUD {
             return;
         }
 
-        int offset = SCANNER.scrollOffset(visibleRows);
+        int offset = controls ? SCANNER.scrollOffset(visibleRows) : 0;
         int limit = Math.min(visibleRows, ranked.size() - offset);
         for (int i = 0; i < limit; i++) {
             BestiaryScanner.MobEntry mob = ranked.get(offset + i);
